@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MQTT Command Interface</title>
+    <!-- Paho MQTT Client Library from a CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js" type="text/javascript"></script>
+    <style>
+        :root {
+            --bg-color: #121212;
+            --primary-text-color: #E0E0E0;
+            --secondary-text-color: #BDBDBD;
+            --border-color: #333;
+            --accent-color: #4CAF50;
+            --output-bg-color: #1E1E1E;
+            --input-bg-color: #2C2C2C;
+        }
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            font-family: 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--primary-text-color);
+        }
+        #app-container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            max-width: 800px;
+            margin: 0 auto;
+            box-sizing: border-box;
+        }
+        #header {
+            padding: 10px 15px;
+            background-color: var(--output-bg-color);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        #header h1 {
+            margin: 0;
+            font-size: 1.2em;
+        }
+        #status {
+            font-size: 0.9em;
+            padding: 4px 8px;
+            border-radius: 5px;
+        }
+        .status-connected {
+            background-color: var(--accent-color);
+            color: white;
+        }
+        .status-disconnected {
+            background-color: #F44336;
+            color: white;
+        }
+        #output-container {
+            flex-grow: 1;
+            overflow-y: auto;
+            background-color: var(--output-bg-color);
+            padding: 15px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.95em;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        #output-container .message {
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px dashed var(--border-color);
+        }
+        #output-container .message:last-child {
+            border-bottom: none;
+        }
+        #command-form {
+            display: flex;
+            padding: 10px;
+            border-top: 1px solid var(--border-color);
+            background-color: var(--bg-color);
+        }
+        #command-input {
+            flex-grow: 1;
+            background-color: var(--input-bg-color);
+            color: var(--primary-text-color);
+            border: 1px solid var(--border-color);
+            padding: 10px;
+            border-radius: 5px;
+            margin-right: 10px;
+            font-size: 1em;
+        }
+        #command-input:focus {
+            outline: none;
+            border-color: var(--accent-color);
+        }
+        #send-button {
+            background-color: var(--accent-color);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: bold;
+        }
+        #send-button:hover {
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body>
+    <div id="app-container">
+        <div id="header">
+            <h1>Command Output</h1>
+            <span id="status">Connecting...</span>
+        </div>
+        <div id="output-container" aria-live="polite"></div>
+        <form id="command-form" action="javascript:void(0);">
+            <input type="text" id="command-input" placeholder="Type command and press Enter..." autocomplete="off">
+            <button type="submit" id="send-button">Send</button>
+        </form>
+    </div>
+
+    <script>
+        // --- MQTT Connection Settings ---
+        const BROKER = "f1f689ccfbc242149afb7d01719c207e.s1.eu.hivemq.cloud";
+        const PORT = 8884; // Use WebSocket Port for browsers
+        const USERNAME = "hacker105";
+        const PASSWORD = "Hacker123!@#";
+        const COMMAND_TOPIC = "test/topic";
+        const RESPONSE_TOPIC = "test/topic/response";
+        const CLIENT_ID = "web-client-" + Math.random().toString(16).substr(2, 8);
+
+        // --- DOM Elements ---
+        const statusEl = document.getElementById('status');
+        const outputEl = document.getElementById('output-container');
+        const formEl = document.getElementById('command-form');
+        const inputEl = document.getElementById('command-input');
+
+        // --- Initialize MQTT Client ---
+        const client = new Paho.MQTT.Client(BROKER, PORT, CLIENT_ID);
+
+        // --- Set Callbacks ---
+        client.onConnectionLost = onConnectionLost;
+        client.onMessageArrived = onMessageArrived;
+
+        // --- Connection Options ---
+        const connectOptions = {
+            onSuccess: onConnect,
+            onFailure: onFailure,
+            userName: USERNAME,
+            password: PASSWORD,
+            useSSL: true
+        };
+
+        // --- Connect to Broker ---
+        client.connect(connectOptions);
+
+        // --- Callback Functions ---
+        function onConnect() {
+            console.log("Connected to MQTT Broker!");
+            statusEl.textContent = "Connected";
+            statusEl.className = 'status-connected';
+            // Subscribe to the response topic
+            client.subscribe(RESPONSE_TOPIC);
+        }
+
+        function onFailure(response) {
+            console.error("Connection failed: " + response.errorMessage);
+            statusEl.textContent = "Disconnected";
+            statusEl.className = 'status-disconnected';
+        }
+
+        function onConnectionLost(responseObject) {
+            if (responseObject.errorCode !== 0) {
+                console.log("Connection lost: " + responseObject.errorMessage);
+                statusEl.textContent = "Reconnecting...";
+                statusEl.className = 'status-disconnected';
+            }
+        }
+
+        function onMessageArrived(message) {
+            console.log("Message arrived: " + message.payloadString);
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message';
+            messageDiv.textContent = message.payloadString;
+            outputEl.appendChild(messageDiv);
+            // Scroll to the bottom
+            outputEl.scrollTop = outputEl.scrollHeight;
+        }
+
+        // --- Send Command Function ---
+        function sendCommand(command) {
+            if (!client.isConnected()) {
+                alert("Not connected to the broker. Please wait.");
+                return;
+            }
+            if (command.trim() === "") return;
+
+            console.log(`Publishing command: ${command}`);
+            const message = new Paho.MQTT.Message(command);
+            message.destinationName = COMMAND_TOPIC;
+            client.send(message);
+        }
+
+        // --- Event Listener for Form ---
+        formEl.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const command = inputEl.value;
+            sendCommand(command);
+            inputEl.value = ''; // Clear input after sending
+        });
+    </script>
+</body>
+</html>
